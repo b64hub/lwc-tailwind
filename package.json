@@ -30,6 +30,13 @@
     "prepack": "npm run clean && npm run build && oclif manifest",
     "postpack": "rm -f oclif.manifest.json"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sebastiankvalvag/lwc-tailwind.git"
+  },
+  "homepage": "https://github.com/sebastiankvalvag/lwc-tailwind",
+  "bugs": "https://github.com/sebastiankvalvag/lwc-tailwind/issues",
+  "author": "Sebastian Kvalvag",
   "dependencies": {
     "@oclif/core": "^4",
     "@salesforce/sf-plugins-core": "^12",

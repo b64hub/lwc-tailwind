@@ -1,12 +1,14 @@
 /**
  * CSS Builder: PostCSS compilation + per-component CSS splitting.
  *
- * Combines two steps:
+ * Combines three steps:
  * 1. Run PostCSS to compile Tailwind CSS
- * 2. Parse compiled CSS and split into per-component files
+ * 2. Extract base variables and write to static resource
+ * 3. Parse compiled CSS and split utility rules into per-component files
  *
- * Includes smart base block optimization — only includes the ~2.6 KB
- * Tailwind CSS variable block if a component uses classes that need it.
+ * Base variables (--tw-*) live in the static resource and are loaded
+ * once per component by tailwindElement via loadStyle. Per-component
+ * CSS files contain only the utility class rules each component uses.
  */
 
 import { execSync } from 'node:child_process';
@@ -33,24 +35,13 @@ export interface SplitResult {
   rulesIncluded: number;
   outputBytes: number;
   cssPath: string;
-  baseIncluded: boolean;
 }
 
 export interface BuildResult {
   results: SplitResult[];
   writtenPaths: string[];
+  baseBlockBytes: number;
 }
-
-// ── CSS Variable Patterns ───────────────────────────────────
-
-/**
- * Patterns in compiled CSS rule text that indicate the rule depends
- * on --tw-* CSS variables from the base block.
- *
- * If a component uses any class whose compiled CSS contains one of
- * these patterns, the base block must be included.
- */
-const TW_VAR_PATTERN = /var\(--tw-/;
 
 // ── Marker ──────────────────────────────────────────────────
 
@@ -65,10 +56,19 @@ export function compileCss(
   production = false,
 ): void {
   const env = production ? 'NODE_ENV=production ' : '';
-  execSync(`${env}npx postcss ${inputPath} -o ${outputPath}`, {
-    cwd,
-    stdio: 'pipe',
-  });
+  try {
+    execSync(`${env}npx postcss ${inputPath} -o ${outputPath}`, {
+      cwd,
+      stdio: 'pipe',
+    });
+  } catch (err) {
+    const stderr =
+      err instanceof Error && 'stderr' in err
+        ? String((err as { stderr: unknown }).stderr).trim()
+        : '';
+    const detail = stderr || (err instanceof Error ? err.message : String(err));
+    throw new Error(`PostCSS compilation failed:\n${detail}`);
+  }
 }
 
 // ── CSS Parsing ─────────────────────────────────────────────
@@ -211,25 +211,15 @@ async function extractComponentClasses(
 function buildComponentCss(
   usedClasses: Set<string>,
   classMap: Map<string, RuleEntry[]>,
-  baseString: string,
-): { css: string; baseIncluded: boolean } {
-  const parts: string[] = [];
+): string {
   const standaloneRules: string[] = [];
   const mediaGroups = new Map<string, string[]>();
-
-  // Collect matched rules
-  let needsBase = false;
 
   for (const cls of usedClasses) {
     const entries = classMap.get(cls);
     if (!entries) continue;
 
     for (const entry of entries) {
-      // Check if this rule references --tw-* variables
-      if (TW_VAR_PATTERN.test(entry.ruleText)) {
-        needsBase = true;
-      }
-
       if (entry.wrapperName) {
         const key = `@${entry.wrapperName} ${entry.wrapperParams}`;
         if (!mediaGroups.has(key)) mediaGroups.set(key, []);
@@ -240,10 +230,7 @@ function buildComponentCss(
     }
   }
 
-  // Only include the base block if at least one rule needs --tw-* variables
-  if (needsBase && baseString) {
-    parts.push(baseString);
-  }
+  const parts: string[] = [];
 
   for (const rule of standaloneRules) {
     parts.push(rule);
@@ -253,7 +240,7 @@ function buildComponentCss(
     parts.push(`${wrapper} {\n${rules.join('\n')}\n}`);
   }
 
-  return { css: parts.join('\n'), baseIncluded: needsBase };
+  return parts.join('\n');
 }
 
 async function writeComponentCss(
@@ -295,22 +282,27 @@ const EXCLUDE_COMPONENTS = new Set([
 ]);
 
 export async function splitCss(
-  tailwindCssPath: string,
+  compiledCssPath: string,
   lwcDir: string,
+  staticResourcePath: string,
 ): Promise<BuildResult> {
   // 1. Read compiled CSS
-  const fullCss = await readFile(tailwindCssPath, 'utf-8');
+  const fullCss = await readFile(compiledCssPath, 'utf-8');
 
   // 2. Parse
   const { baseString, classMap } = parseTailwindCss(fullCss);
 
-  // 3. Discover components
+  // 3. Write base variables to static resource
+  await writeFile(staticResourcePath, baseString, 'utf-8');
+  const baseBlockBytes = Buffer.byteLength(baseString, 'utf-8');
+
+  // 4. Discover components
   const entries = await readdir(lwcDir, { withFileTypes: true });
   const components = entries
     .filter((e) => e.isDirectory() && !EXCLUDE_COMPONENTS.has(e.name))
     .map((e) => ({ name: e.name, dir: path.join(lwcDir, e.name) }));
 
-  // 4. Process each component
+  // 5. Process each component (utility rules only, no base block)
   const results: SplitResult[] = [];
   const writtenPaths: string[] = [];
 
@@ -318,11 +310,7 @@ export async function splitCss(
     const usedClasses = await extractComponentClasses(comp.dir, comp.name);
     if (usedClasses.size === 0) continue;
 
-    const { css: generatedCss, baseIncluded } = buildComponentCss(
-      usedClasses,
-      classMap,
-      baseString,
-    );
+    const generatedCss = buildComponentCss(usedClasses, classMap);
 
     let rulesIncluded = 0;
     for (const cls of usedClasses) {
@@ -338,9 +326,8 @@ export async function splitCss(
       rulesIncluded,
       outputBytes: Buffer.byteLength(generatedCss, 'utf-8'),
       cssPath,
-      baseIncluded,
     });
   }
 
-  return { results, writtenPaths };
+  return { results, writtenPaths, baseBlockBytes };
 }

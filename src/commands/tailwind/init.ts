@@ -1,9 +1,10 @@
 import path from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import { readSfProject, getProjectPaths } from '../../services/project.js';
 import { installDevDeps } from '../../services/npm.js';
-import { safeWriteFile, ensureDir } from '../../services/file-utils.js';
+import { safeWriteFile, ensureDir, fileExists } from '../../services/file-utils.js';
 import { compileCss, splitCss } from '../../services/css-builder.js';
 import { tailwindConfig, postcssConfig, tailwindCssSource } from '../../templates/configs.js';
 import {
@@ -17,7 +18,7 @@ import {
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
 const messages = Messages.loadMessages('lwc-tailwind', 'tailwind.init');
 
-const USER_DEPS = ['tailwindcss@3', 'postcss', 'autoprefixer', 'cssnano'];
+const USER_DEPS = ['tailwindcss@3', 'postcss', 'postcss-cli', 'autoprefixer', 'cssnano'];
 
 export type InitResult = {
   packageDir: string;
@@ -78,7 +79,21 @@ export default class TailwindInit extends SfCommand<InitResult> {
     await ensureDir(paths.srcDir);
     track(await safeWriteFile(path.join(paths.srcDir, 'tailwind.css'), tailwindCssSource()));
 
-    // 4. Static resource
+    // 4. Update .forceignore and .gitignore
+    const ignoreEntry = 'src/.tailwind-compiled.css';
+    for (const ignoreFile of ['.forceignore', '.gitignore']) {
+      const ignorePath = path.join(cwd, ignoreFile);
+      if (await fileExists(ignorePath)) {
+        const content = await readFile(ignorePath, 'utf-8');
+        if (!content.includes(ignoreEntry)) {
+          const separator = content.endsWith('\n') ? '' : '\n';
+          await writeFile(ignorePath, `${content}${separator}\n# Tailwind CSS intermediate build\n${ignoreEntry}\n`, 'utf-8');
+          this.log(`  Updated ${ignoreFile}`);
+        }
+      }
+    }
+
+    // 5. Static resource
     this.log('');
     this.log('Creating static resource...');
     await ensureDir(paths.staticResourceDir);
@@ -89,7 +104,7 @@ export default class TailwindInit extends SfCommand<InitResult> {
       ),
     );
 
-    // 5. Runtime LWCs
+    // 6. Runtime LWCs
     this.log('');
     this.log('Creating runtime components...');
 
@@ -113,12 +128,12 @@ export default class TailwindInit extends SfCommand<InitResult> {
       ),
     );
 
-    // 6. Initial build
+    // 7. Initial build
     this.log('');
     this.log('Running initial CSS build...');
     try {
-      compileCss(cwd, 'src/tailwind.css', paths.tailwindCssPath);
-      const { results } = await splitCss(paths.tailwindCssPath, paths.lwcDir);
+      compileCss(cwd, 'src/tailwind.css', paths.compiledCssPath);
+      const { results } = await splitCss(paths.compiledCssPath, paths.lwcDir, paths.tailwindCssPath);
       this.log(`  Built and split into ${results.length} components`);
     } catch {
       this.log('  Skipped (no components using Tailwind classes yet)');

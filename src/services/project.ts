@@ -19,6 +19,7 @@ export interface ProjectPaths {
   staticResourceDir: string;
   srcDir: string;
   tailwindCssPath: string;
+  compiledCssPath: string;
 }
 
 export async function readSfProject(cwd: string): Promise<SfProjectConfig> {
@@ -56,5 +57,6 @@ export function getProjectPaths(cwd: string, packageDir: string): ProjectPaths {
     staticResourceDir: path.join(cwd, packageDir, 'main/default/staticresources'),
     srcDir: path.join(cwd, 'src'),
     tailwindCssPath: path.join(cwd, packageDir, 'main/default/staticresources/tailwind.css'),
+    compiledCssPath: path.join(cwd, 'src', '.tailwind-compiled.css'),
   };
 }

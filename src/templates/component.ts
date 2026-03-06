@@ -11,7 +11,6 @@ export function componentJs(name: string): string {
   return `import TailwindElement from 'c/tailwindElement';
 
 export default class ${className} extends TailwindElement {
-    static useSplitCss = true;
 }
 `;
 }

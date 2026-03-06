@@ -1,5 +1,7 @@
+src/
 example/
 .claude/
 .git/
 .gitignore
-.gitattributes
+tsconfig.json
+tsconfig.tsbuildinfo

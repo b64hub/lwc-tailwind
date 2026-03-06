@@ -88,8 +88,8 @@ export default class TailwindComponent extends SfCommand<ComponentResult> {
     this.log('');
     this.log('Generating per-component CSS...');
     try {
-      compileCss(cwd, 'src/tailwind.css', paths.tailwindCssPath);
-      await splitCss(paths.tailwindCssPath, paths.lwcDir);
+      compileCss(cwd, 'src/tailwind.css', paths.compiledCssPath);
+      await splitCss(paths.compiledCssPath, paths.lwcDir, paths.tailwindCssPath);
       this.log('  CSS generated');
     } catch {
       this.log('  CSS build skipped — run `sf tailwind build` manually');
