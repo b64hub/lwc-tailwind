@@ -1,0 +1,12 @@
+/*
+ * This file will contain the compiled Tailwind CSS output.
+ * It acts as a shared CSS module that other LWC components can @import.
+ *
+ * PAIN POINT: This file must be manually kept in sync with the
+ * PostCSS build output. You cannot use @tailwind directives here
+ * because LWC does not process CSS through PostCSS.
+ *
+ * The actual compiled CSS gets generated into the static resource.
+ * This CSS module approach duplicates styles in every component
+ * that imports it (Shadow DOM forces this).
+ */

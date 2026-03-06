@@ -1,0 +1,5 @@
+example/
+.claude/
+.git/
+.gitignore
+.gitattributes

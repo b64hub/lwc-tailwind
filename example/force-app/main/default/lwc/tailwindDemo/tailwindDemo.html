@@ -1,0 +1,67 @@
+<template>
+    <div class="p-8 max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-text-default mb-2">
+                Tailwind CSS in LWC — Current State
+            </h1>
+            <p class="text-text-weak text-lg">
+                Testing how Tailwind is used today. Notice the boilerplate required.
+            </p>
+        </div>
+
+        <!-- Cards grid using child components -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <template for:each={cards} for:item="card">
+                <c-tailwind-card
+                    key={card.id}
+                    title={card.title}
+                    description={card.description}
+                ></c-tailwind-card>
+            </template>
+        </div>
+
+        <!-- Button variants -->
+        <div class="border border-border rounded-lg p-6">
+            <h2 class="text-xl font-semibold text-text-default mb-4">Button Variants</h2>
+            <div class="flex gap-3 flex-wrap">
+                <c-tailwind-button label="Primary" variant="primary"></c-tailwind-button>
+                <c-tailwind-button label="Secondary" variant="secondary"></c-tailwind-button>
+                <c-tailwind-button label="Danger" variant="danger"></c-tailwind-button>
+            </div>
+        </div>
+
+        <!-- Pain points callout -->
+        <div class="mt-8 bg-warning/10 border border-warning/30 rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-text-default mb-3">
+                Pain Points vs Next.js
+            </h3>
+            <ul class="space-y-2 text-sm text-text-weak">
+                <li class="flex items-start gap-2">
+                    <span class="text-error font-bold mt-0.5">1.</span>
+                    <span><strong>Boilerplate:</strong> Every component needs loadStyle + isCssLoaded flag</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="text-error font-bold mt-0.5">2.</span>
+                    <span><strong>No @apply:</strong> Cannot create semantic classes from utilities in component CSS</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="text-error font-bold mt-0.5">3.</span>
+                    <span><strong>Manual build:</strong> Run PostCSS externally, deploy static resource, no HMR</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="text-error font-bold mt-0.5">4.</span>
+                    <span><strong>Style duplication:</strong> CSS module @import copies styles into every shadow root</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="text-error font-bold mt-0.5">5.</span>
+                    <span><strong>Dynamic classes:</strong> Need verbose JS getters instead of clsx/cn patterns</span>
+                </li>
+                <li class="flex items-start gap-2">
+                    <span class="text-error font-bold mt-0.5">6.</span>
+                    <span><strong>PurgeCSS blindspot:</strong> Dynamic class construction breaks tree-shaking</span>
+                </li>
+            </ul>
+        </div>
+    </div>
+</template>

@@ -1,0 +1,25 @@
+{
+  "name": "lwc-tailwind",
+  "version": "0.1.0",
+  "description": "Tailwind CSS for Lightning Web Components — zero-config setup with per-component CSS splitting",
+  "type": "module",
+  "bin": {
+    "lwc-tailwind": "cli/index.mjs"
+  },
+  "files": [
+    "cli/"
+  ],
+  "keywords": [
+    "tailwind",
+    "tailwindcss",
+    "lwc",
+    "salesforce",
+    "lightning",
+    "lightning-web-components",
+    "css"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

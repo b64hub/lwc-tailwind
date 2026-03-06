@@ -1,0 +1,35 @@
+<template>
+    <!-- Using Tailwind utility classes directly in the template -->
+    <div class="rounded-lg shadow-md overflow-hidden bg-background">
+        <template lwc:if={imageUrl}>
+            <img src={imageUrl} alt={title} class="w-full h-48 object-cover " />
+        </template>
+
+        <div class="p-6">
+            <h3 class="text-lg font-semibold text-text-default mb-2">{title}</h3>
+            <p class="text-text-weak text-sm leading-relaxed">{description}</p>
+
+            <div class="mt-4 flex gap-2">
+                <!--
+                    PAIN POINT: Cannot create reusable Tailwind component classes
+                    with @apply. Must repeat utility strings everywhere or
+                    resort to copy-paste.
+
+                    In Next.js you'd do:
+                    @apply px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700;
+
+                    In LWC you must inline everything:
+                -->
+                <button class="px-4 py-2 bg-brand text-white rounded-md text-sm font-medium hover:bg-brand-dark transition-colors">
+                    Primary
+                </button>
+                <button class="px-4 py-2 border border-border text-text-default rounded-md text-sm font-medium hover:bg-background-alt transition-colors">
+                    Secondary
+                </button>
+                <button class="test-btn">
+                    Secondary
+                </button>
+            </div>
+        </div>
+    </div>
+</template>

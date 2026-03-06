@@ -1,0 +1,51 @@
+{
+  "name": "lwc-tailwind-example",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Example Salesforce project using lwc-tailwind",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "split:css": "node scripts/css-splitter/index.mjs",
+    "build:css": "postcss src/tailwind.css -o force-app/main/default/staticresources/tailwind.css && node scripts/css-splitter/index.mjs",
+    "build:css:prod": "NODE_ENV=production postcss src/tailwind.css -o force-app/main/default/staticresources/tailwind.css && node scripts/css-splitter/index.mjs",
+    "watch:css": "postcss src/tailwind.css -o force-app/main/default/staticresources/tailwind.css --watch",
+    "lint": "eslint **/{aura,lwc}/**/*.js",
+    "test": "npm run test:unit",
+    "test:unit": "sfdx-lwc-jest",
+    "test:unit:watch": "sfdx-lwc-jest --watch",
+    "test:unit:debug": "sfdx-lwc-jest --debug",
+    "test:unit:coverage": "sfdx-lwc-jest --coverage",
+    "prettier": "prettier --write \"**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\"",
+    "prettier:verify": "prettier --check \"**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\""
+  },
+  "devDependencies": {
+    "@lwc/eslint-plugin-lwc": "^3.1.0",
+    "@prettier/plugin-xml": "^3.4.1",
+    "@salesforce/eslint-config-lwc": "^4.0.0",
+    "@salesforce/eslint-plugin-aura": "^3.0.0",
+    "@salesforce/eslint-plugin-lightning": "^2.0.0",
+    "@salesforce/sfdx-lwc-jest": "^7.0.2",
+    "autoprefixer": "^10.4.27",
+    "chokidar": "^5.0.0",
+    "cssnano": "^7.1.2",
+    "eslint": "^9.29.0",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-jest": "^28.14.0",
+    "postcss": "^8.5.8",
+    "postcss-cli": "^11.0.1",
+    "prettier": "^3.5.3",
+    "prettier-plugin-apex": "^2.2.6",
+    "tailwindcss": "^3.4.19"
+  },
+  "lint-staged": {
+    "**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}": [
+      "prettier --write"
+    ],
+    "**/{aura,lwc}/**/*.js": [
+      "eslint"
+    ],
+    "**/lwc/**": [
+      "sfdx-lwc-jest -- --bail --findRelatedTests --passWithNoTests"
+    ]
+  }
+}
