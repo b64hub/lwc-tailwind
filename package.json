@@ -1,14 +1,45 @@
 {
   "name": "lwc-tailwind",
   "version": "0.1.0",
-  "description": "Tailwind CSS for Lightning Web Components — zero-config setup with per-component CSS splitting",
+  "description": "Salesforce CLI plugin for Tailwind CSS in Lightning Web Components",
   "type": "module",
+  "main": "lib/index.js",
   "bin": {
-    "lwc-tailwind": "cli/index.mjs"
+    "lwc-tailwind": "./bin/dev.js"
   },
   "files": [
-    "cli/"
+    "/lib",
+    "/bin",
+    "/messages",
+    "/oclif.manifest.json"
   ],
+  "oclif": {
+    "commands": "./lib/commands",
+    "bin": "sf",
+    "topicSeparator": " ",
+    "flexibleTaxonomy": true,
+    "topics": {
+      "tailwind": {
+        "description": "Configure and build Tailwind CSS for Lightning Web Components."
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rm -rf lib",
+    "prepack": "npm run clean && npm run build && oclif manifest",
+    "postpack": "rm -f oclif.manifest.json"
+  },
+  "dependencies": {
+    "@oclif/core": "^4",
+    "@salesforce/sf-plugins-core": "^12",
+    "postcss": "^8",
+    "chokidar": "^5"
+  },
+  "devDependencies": {
+    "oclif": "^4",
+    "typescript": "^5"
+  },
   "keywords": [
     "tailwind",
     "tailwindcss",
@@ -16,7 +47,8 @@
     "salesforce",
     "lightning",
     "lightning-web-components",
-    "css"
+    "css",
+    "sf-plugin"
   ],
   "license": "MIT",
   "engines": {

@@ -21,6 +21,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Compiled output
+lib/
+oclif.manifest.json
+
 # Dependency directories
 node_modules/
 
