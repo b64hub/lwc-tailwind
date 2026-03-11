@@ -1,7 +1,12 @@
 # Compiled output
 lib/
 oclif.manifest.json
+tsconfig.tsbuildinfo
 *.tgz
+
+# Salesforce local config
+.sf/
+.sfdx/
 
 # Dependencies
 node_modules/
