@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import { readSfProject, getProjectPaths } from '../../services/project.js';
-import { installDevDeps } from '../../services/npm.js';
+import { addDevDeps } from '../../services/npm.js';
 import { safeWriteFile, ensureDir, fileExists } from '../../services/file-utils.js';
 import { compileCss, splitCss } from '../../services/css-builder.js';
 import { tailwindConfig, postcssConfig, tailwindCssSource } from '../../templates/configs.js';
@@ -68,10 +68,15 @@ export default class TailwindInit extends SfCommand<InitResult> {
     this.log(`  Package directory: ${packageDir}`);
     this.log(`  API version: ${apiVersion}`);
 
-    // 2. Install dependencies
+    // 2. Add dependencies to package.json
     this.log('');
-    this.log('Installing dependencies...');
-    installDevDeps(USER_DEPS, cwd);
+    this.log('Adding dependencies to package.json...');
+    const added = await addDevDeps(USER_DEPS, cwd);
+    if (added.length > 0) {
+      this.log(`  Added: ${added.join(', ')}`);
+    } else {
+      this.log('  All dependencies already present.');
+    }
 
     // 3. Config files
     this.log('');
@@ -125,6 +130,7 @@ export default class TailwindInit extends SfCommand<InitResult> {
     this.log('Tailwind CSS initialized!');
     this.log('');
     this.log('Next steps:');
+    this.log('  npm install              Install the added dependencies');
     this.log('  sf tailwind watch        Start the file watcher');
     this.log('  sf tailwind component    Scaffold a new component');
     this.log('  sf tailwind build        One-off CSS build');

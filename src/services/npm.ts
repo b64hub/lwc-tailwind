@@ -2,13 +2,29 @@
  * npm operations: install dependencies and add scripts to package.json.
  */
 
-import { execSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-export function installDevDeps(deps: string[], cwd: string): void {
-  const depList = deps.join(' ');
-  execSync(`npm install --save-dev ${depList}`, { cwd, stdio: 'inherit' });
+export async function addDevDeps(deps: string[], cwd: string): Promise<string[]> {
+  const pkgPath = path.join(cwd, 'package.json');
+  const raw = await readFile(pkgPath, 'utf-8');
+  const pkg = JSON.parse(raw) as Record<string, unknown>;
+  const devDeps = (pkg.devDependencies ?? {}) as Record<string, string>;
+  const added: string[] = [];
+
+  for (const dep of deps) {
+    const match = dep.match(/^(@?[^@]+)(?:@(.+))?$/);
+    if (!match) continue;
+    const [, name, version] = match;
+    if (!devDeps[name!]) {
+      devDeps[name!] = version ?? 'latest';
+      added.push(dep);
+    }
+  }
+
+  pkg.devDependencies = devDeps;
+  await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n', 'utf-8');
+  return added;
 }
 
 export interface AddScriptsResult {
