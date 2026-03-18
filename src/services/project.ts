@@ -1,17 +1,20 @@
 /**
  * Salesforce project detection and configuration.
  *
- * Reads sfdx-project.json to determine packageDir and apiVersion,
- * and derives standard directory paths from that.
+ * Wraps @salesforce/core SfProject to resolve package directories
+ * and derive standard directory paths.
  */
 
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
+import { SfProject } from '@salesforce/core';
+
+const DEFAULT_API_VERSION = '65.0';
 
 export interface SfProjectConfig {
   packageDir: string;
   apiVersion: string;
-  raw: Record<string, unknown>;
+  project: SfProject;
 }
 
 export interface ProjectPaths {
@@ -23,40 +26,41 @@ export interface ProjectPaths {
 }
 
 export async function readSfProject(cwd: string): Promise<SfProjectConfig> {
-  const projectPath = path.join(cwd, 'sfdx-project.json');
+  const project = await SfProject.resolve(cwd);
+  const defaultPackage = project.getDefaultPackage();
+  const packageDir = defaultPackage.path;
 
-  let raw: Record<string, unknown>;
-  try {
-    const content = await readFile(projectPath, 'utf-8');
-    raw = JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    throw new Error(
-      'No sfdx-project.json found. Are you in a Salesforce project directory?'
-    );
-  }
+  const config = await project.resolveProjectConfig();
+  const apiVersion = (config.sourceApiVersion as string) ?? DEFAULT_API_VERSION;
 
-  // Extract the default package directory
-  let packageDir = 'force-app';
-  const packageDirectories = raw.packageDirectories as Array<Record<string, unknown>> | undefined;
-  if (packageDirectories?.[0]?.path) {
-    packageDir = packageDirectories[0].path as string;
-  }
-
-  // Extract API version
-  let apiVersion = '62.0';
-  if (raw.sourceApiVersion) {
-    apiVersion = raw.sourceApiVersion as string;
-  }
-
-  return { packageDir, apiVersion, raw };
+  return { packageDir, apiVersion, project };
 }
 
 export function getProjectPaths(cwd: string, packageDir: string): ProjectPaths {
+  const base = resolveMetadataRoot(cwd, packageDir);
   return {
-    lwcDir: path.join(cwd, packageDir, 'main/default/lwc'),
-    staticResourceDir: path.join(cwd, packageDir, 'main/default/staticresources'),
+    lwcDir: path.join(base, 'lwc'),
+    staticResourceDir: path.join(base, 'staticresources'),
     srcDir: path.join(cwd, 'src'),
-    tailwindCssPath: path.join(cwd, packageDir, 'main/default/staticresources/tailwind.css'),
+    tailwindCssPath: path.join(base, 'staticresources/tailwind.css'),
     compiledCssPath: path.join(cwd, 'src', '.tailwind-compiled.css'),
   };
+}
+
+/**
+ * Resolve the directory that contains lwc/, staticresources/, etc.
+ * Prefers `{packageDir}/lwc` (flat layout) and falls back to
+ * `{packageDir}/main/default` (standard SFDX layout).
+ */
+function resolveMetadataRoot(cwd: string, packageDir: string): string {
+  const flat = path.join(cwd, packageDir);
+  if (existsSync(path.join(flat, 'lwc'))) {
+    return flat;
+  }
+  const nested = path.join(cwd, packageDir, 'main/default');
+  if (existsSync(path.join(nested, 'lwc'))) {
+    return nested;
+  }
+  // Default to flat layout — directories will be created later
+  return flat;
 }
