@@ -6,11 +6,28 @@ export function toKebabCase(name: string): string {
   return name.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
 }
 
+export function componentTs(name: string): string {
+  const className = name.charAt(0).toUpperCase() + name.slice(1);
+  return `import { LightningElement } from 'lwc';
+import { useTailwind } from 'c/tailwindMixin';
+
+export default class ${className} extends LightningElement {
+    connectedCallback(): void {
+        useTailwind(this);
+    }
+}
+`;
+}
+
 export function componentJs(name: string): string {
   const className = name.charAt(0).toUpperCase() + name.slice(1);
-  return `import TailwindElement from 'c/tailwindElement';
+  return `import { LightningElement } from 'lwc';
+import { useTailwind } from 'c/tailwindMixin';
 
-export default class ${className} extends TailwindElement {
+export default class ${className} extends LightningElement {
+    connectedCallback() {
+        useTailwind(this);
+    }
 }
 `;
 }

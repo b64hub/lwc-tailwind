@@ -1,11 +1,11 @@
 import path from 'node:path';
-import { SfCommand } from '@salesforce/sf-plugins-core';
+import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Args } from '@oclif/core';
 import { Messages } from '@salesforce/core';
 import { readSfProject, getProjectPaths } from '../../services/project.js';
 import { fileExists, ensureDir, safeWriteFile } from '../../services/file-utils.js';
 import { compileCss, splitCss } from '../../services/css-builder.js';
-import { componentJs, componentHtml, componentMeta, toKebabCase } from '../../templates/component.js';
+import { componentTs, componentJs, componentHtml, componentMeta, toKebabCase } from '../../templates/component.js';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
 const messages = Messages.loadMessages('lwc-tailwind', 'tailwind.component');
@@ -23,6 +23,13 @@ export default class TailwindComponent extends SfCommand<ComponentResult> {
   public static readonly description = messages.getMessage('description');
   public static readonly examples = messages.getMessages('examples');
 
+  public static readonly flags = {
+    js: Flags.boolean({
+      summary: 'Generate a JavaScript component instead of TypeScript.',
+      default: false,
+    }),
+  };
+
   public static readonly args = {
     name: Args.string({
       description: messages.getMessage('args.name.summary'),
@@ -31,9 +38,11 @@ export default class TailwindComponent extends SfCommand<ComponentResult> {
   };
 
   public async run(): Promise<ComponentResult> {
-    const { args } = await this.parse(TailwindComponent);
+    const { args, flags } = await this.parse(TailwindComponent);
     const componentName = args.name as string;
     const cwd = process.cwd();
+    const useTs = !flags.js;
+    const ext = useTs ? 'ts' : 'js';
 
     // Validate name
     if (!NAME_REGEX.test(componentName)) {
@@ -60,13 +69,13 @@ export default class TailwindComponent extends SfCommand<ComponentResult> {
 
     const files: string[] = [];
 
-    const jsResult = await safeWriteFile(
-      path.join(componentDir, `${componentName}.js`),
-      componentJs(componentName),
+    const scriptResult = await safeWriteFile(
+      path.join(componentDir, `${componentName}.${ext}`),
+      useTs ? componentTs(componentName) : componentJs(componentName),
       { force: true },
     );
-    this.log(`  Created ${jsResult.path}`);
-    files.push(jsResult.path);
+    this.log(`  Created ${scriptResult.path}`);
+    files.push(scriptResult.path);
 
     const htmlResult = await safeWriteFile(
       path.join(componentDir, `${componentName}.html`),
