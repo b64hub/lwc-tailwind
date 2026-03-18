@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
@@ -7,18 +8,14 @@ import { installDevDeps } from '../../services/npm.js';
 import { safeWriteFile, ensureDir, fileExists } from '../../services/file-utils.js';
 import { compileCss, splitCss } from '../../services/css-builder.js';
 import { tailwindConfig, postcssConfig, tailwindCssSource } from '../../templates/configs.js';
-import {
-  tailwindElementJs,
-  tailwindElementMeta,
-  tailwindUtilsJs,
-  tailwindUtilsMeta,
-  staticResourceMeta,
-} from '../../templates/runtime.js';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
 const messages = Messages.loadMessages('lwc-tailwind', 'tailwind.init');
 
 const USER_DEPS = ['tailwindcss@3', 'postcss', 'postcss-cli', 'autoprefixer', 'cssnano'];
+
+/** Package version ID for the lwc-tailwind-bootstrap unlocked package. */
+const BOOTSTRAP_PACKAGE_VERSION = '04tXXXXXXXXXXXXXXX';
 
 export type InitResult = {
   packageDir: string;
@@ -36,6 +33,11 @@ export default class TailwindInit extends SfCommand<InitResult> {
     'output-dir': Flags.directory({
       char: 'd',
       summary: messages.getMessage('flags.output-dir.summary'),
+    }),
+    'package-version': Flags.string({
+      char: 'p',
+      summary: 'Package version ID for the lwc-tailwind-bootstrap unlocked package.',
+      default: BOOTSTRAP_PACKAGE_VERSION,
     }),
   };
 
@@ -93,42 +95,21 @@ export default class TailwindInit extends SfCommand<InitResult> {
       }
     }
 
-    // 5. Static resource
+    // 5. Install bootstrap unlocked package (tailwindMixin, tailwindUtils, static resource)
     this.log('');
-    this.log('Creating static resource...');
-    await ensureDir(paths.staticResourceDir);
-    track(
-      await safeWriteFile(
-        path.join(paths.staticResourceDir, 'tailwind.resource-meta.xml'),
-        staticResourceMeta(),
-      ),
-    );
+    this.log('Installing lwc-tailwind-bootstrap package...');
+    const packageVersion = flags['package-version'];
+    try {
+      execSync(`sf package install --package "${packageVersion}" --wait 10 --no-prompt`, {
+        cwd,
+        stdio: 'inherit',
+      });
+      this.log('  Bootstrap package installed.');
+    } catch (error) {
+      this.warn(`Failed to install bootstrap package (${packageVersion}). You may need to install it manually.`);
+    }
 
-    // 6. Runtime LWCs
-    this.log('');
-    this.log('Creating runtime components...');
-
-    const twElDir = path.join(paths.lwcDir, 'tailwindElement');
-    await ensureDir(twElDir);
-    track(await safeWriteFile(path.join(twElDir, 'tailwindElement.js'), tailwindElementJs()));
-    track(
-      await safeWriteFile(
-        path.join(twElDir, 'tailwindElement.js-meta.xml'),
-        tailwindElementMeta(apiVersion),
-      ),
-    );
-
-    const twUtilDir = path.join(paths.lwcDir, 'tailwindUtils');
-    await ensureDir(twUtilDir);
-    track(await safeWriteFile(path.join(twUtilDir, 'tailwindUtils.js'), tailwindUtilsJs()));
-    track(
-      await safeWriteFile(
-        path.join(twUtilDir, 'tailwindUtils.js-meta.xml'),
-        tailwindUtilsMeta(apiVersion),
-      ),
-    );
-
-    // 7. Initial build
+    // 6. Initial build
     this.log('');
     this.log('Running initial CSS build...');
     try {
