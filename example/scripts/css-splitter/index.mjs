@@ -21,7 +21,7 @@ import { buildComponentCss, writeComponentCss } from './css-writer.mjs';
 const DEFAULTS = {
     tailwindCssPath: 'force-app/main/default/staticresources/tailwind.css',
     lwcDir: 'force-app/main/default/lwc',
-    excludeComponents: ['tailwindElement', 'tailwindUtils', 'cssLibTailwind']
+    excludeComponents: ['tailwindElement', 'tailwindUtils']
 };
 
 // ── Main ────────────────────────────────────────────────────

@@ -52,7 +52,6 @@ const SCRIPT_EXTENSIONS = ['.ts', '.js'];
 const DEFAULT_EXCLUDE = new Set([
   'tailwindMixin',
   'tailwindUtils',
-  'cssLibTailwind',
 ]);
 
 // ── PostCSS Compilation ─────────────────────────────────────
