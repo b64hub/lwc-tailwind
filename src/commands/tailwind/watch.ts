@@ -1,10 +1,10 @@
 import path from 'node:path';
 import chokidar from 'chokidar';
-import { SfCommand } from '@salesforce/sf-plugins-core';
-import { Messages } from '@salesforce/core';
+import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
+import { Messages, Org } from '@salesforce/core';
 import { readSfProject, getProjectPaths } from '../../services/project.js';
-import { compileCss, splitCss } from '../../services/css-builder.js';
-import { fileExists } from '../../services/file-utils.js';
+import { fileExists, ensureDir } from '../../services/file-utils.js';
+import { tailwindBuild, deployStaticResource } from '../../services/build.js';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
 const messages = Messages.loadMessages('lwc-tailwind', 'tailwind.watch');
@@ -17,16 +17,29 @@ export default class TailwindWatch extends SfCommand<void> {
   // Watch runs indefinitely — don't timeout
   public static readonly enableJsonFlag = false;
 
+  public static readonly flags = {
+    'no-deploy': Flags.boolean({
+      summary: 'Disable auto-deploy of the static resource after each build.',
+      default: false,
+    }),
+    'target-org': Flags.string({
+      char: 'o',
+      summary: 'Org to deploy to. Defaults to the default org.',
+    }),
+  };
+
   public async run(): Promise<void> {
+    const { flags } = await this.parse(TailwindWatch);
     const cwd = process.cwd();
-    const { packageDir } = await readSfProject(cwd);
-    const paths = getProjectPaths(cwd, packageDir);
+    const { packageDir, project } = await readSfProject(cwd);
+    const paths = getProjectPaths(cwd, packageDir, project);
+    const shouldDeploy = !flags['no-deploy'];
 
     // Check prerequisites
     const missing: string[] = [];
     if (!(await fileExists(path.join(cwd, 'tailwind.config.js')))) missing.push('tailwind.config.js');
     if (!(await fileExists(path.join(cwd, 'postcss.config.js')))) missing.push('postcss.config.js');
-    if (!(await fileExists(path.join(cwd, 'src/tailwind.css')))) missing.push('src/tailwind.css');
+    if (!(await fileExists(path.join(cwd, 'tailwind.css')))) missing.push('tailwind.css');
     if (missing.length > 0) {
       this.error(`Missing required files: ${missing.join(', ')}.\nRun "sf tailwind init" first.`);
     }
@@ -35,9 +48,29 @@ export default class TailwindWatch extends SfCommand<void> {
     const CONFIG_FILES = new Set([
       path.resolve(cwd, 'tailwind.config.js'),
       path.resolve(cwd, 'postcss.config.js'),
+      path.resolve(cwd, 'tailwind.css'),
     ]);
     const DEBOUNCE_MS = 300;
     let splitterWrittenPaths = new Set<string>();
+
+    // Ensure build output directories exist
+    const sfDir = path.join(cwd, '.sf');
+    await ensureDir(sfDir);
+    await ensureDir(paths.staticResourceDir);
+
+    // Resolve org connection for auto-deploy
+    let orgUsername: string | undefined;
+    if (shouldDeploy) {
+      try {
+        const org = flags['target-org']
+          ? await Org.create({ aliasOrUsername: flags['target-org'] })
+          : await Org.create();
+        orgUsername = org.getUsername();
+        this.log(`  Auto-deploy enabled (org: ${orgUsername})`);
+      } catch {
+        this.warn('Could not resolve target org — auto-deploy disabled. Use --target-org or set a default org.');
+      }
+    }
 
     const timestamp = (): string =>
       new Date().toLocaleTimeString('en-GB', { hour12: false });
@@ -45,28 +78,32 @@ export default class TailwindWatch extends SfCommand<void> {
     // Build function
     const build = async (): Promise<void> => {
       try {
-        compileCss(cwd, 'src/tailwind.css', paths.compiledCssPath);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.log(`  [${timestamp()}] CSS build failed: ${msg}`);
-        return;
-      }
-
-      try {
-        const { results, writtenPaths, baseBlockBytes } = await splitCss(
-          paths.compiledCssPath,
-          paths.lwcDir,
-          paths.tailwindCssPath,
-        );
+        const { results, writtenPaths, baseKb, totalRules } = await tailwindBuild({ cwd, paths });
         splitterWrittenPaths = new Set(writtenPaths);
-        const totalRules = results.reduce((sum, r) => sum + r.rulesIncluded, 0);
-        const baseKb = (baseBlockBytes / 1024).toFixed(1);
         this.log(
           `  [${timestamp()}] Built — ${results.length} components, ${totalRules} rules, base ${baseKb} KB`,
         );
+
+        // Auto-deploy static resource
+        if (orgUsername) {
+          try {
+            const status = await deployStaticResource({
+              staticResourceDir: paths.staticResourceDir,
+              usernameOrConnection: orgUsername,
+            });
+            if (status === 'Succeeded') {
+              this.log(`  [${timestamp()}] Deployed static resource`);
+            } else {
+              this.log(`  [${timestamp()}] Deploy finished with status: ${status}`);
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.log(`  [${timestamp()}] Deploy failed: ${msg}`);
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        this.log(`  [${timestamp()}] CSS splitting failed: ${msg}`);
+        this.log(`  [${timestamp()}] Build failed: ${msg}`);
       }
     };
 
@@ -86,7 +123,7 @@ export default class TailwindWatch extends SfCommand<void> {
     const changedFiles = new Set<string>();
 
     const watcher = chokidar.watch(
-      [paths.lwcDir, paths.srcDir, ...CONFIG_FILES],
+      [...paths.allLwcDirs, ...CONFIG_FILES],
       { ignoreInitial: true },
     );
 

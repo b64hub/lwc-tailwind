@@ -39,9 +39,11 @@
   "author": "Sebastian Kvalvag",
   "dependencies": {
     "@oclif/core": "^4",
+    "@salesforce/core": "^8.27.1",
     "@salesforce/sf-plugins-core": "^12",
-    "postcss": "^8",
-    "chokidar": "^5"
+    "@salesforce/source-deploy-retrieve": "^12.31.24",
+    "chokidar": "^5",
+    "postcss": "^8"
   },
   "devDependencies": {
     "oclif": "^4",

@@ -5,8 +5,8 @@ import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import { readSfProject, getProjectPaths } from '../../services/project.js';
 import { addDevDeps } from '../../services/npm.js';
-import { safeWriteFile, ensureDir, fileExists } from '../../services/file-utils.js';
-import { compileCss, splitCss } from '../../services/css-builder.js';
+import { safeWriteFile, fileExists } from '../../services/file-utils.js';
+import { tailwindBuild } from '../../services/build.js';
 import { tailwindConfig, postcssConfig, tailwindCssSource } from '../../templates/configs.js';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
@@ -30,14 +30,19 @@ export default class TailwindInit extends SfCommand<InitResult> {
   public static readonly examples = messages.getMessages('examples');
 
   public static readonly flags = {
-    'output-dir': Flags.directory({
+    'package-dir': Flags.directory({
       char: 'd',
-      summary: messages.getMessage('flags.output-dir.summary'),
+      summary: 'Package directory where staticresources/ and lwc/ folders are located (e.g., force-app/main/default). Defaults to the detected package directory from sfdx-project.json.',
     }),
     'package-version': Flags.string({
       char: 'p',
       summary: 'Package version ID for the lwc-tailwind-bootstrap unlocked package.',
       default: BOOTSTRAP_PACKAGE_VERSION,
+    }),
+    'target-org': Flags.string({
+      char: 'o',
+      summary: 'Salesforce org where the lwc-tailwind-bootstrap package should be installed.',
+      required: false,
     }),
   };
 
@@ -60,11 +65,11 @@ export default class TailwindInit extends SfCommand<InitResult> {
     // 1. Read project config
     this.log('');
     this.log('Reading project configuration...');
-    const { packageDir: detectedDir, apiVersion } = await readSfProject(cwd);
-    const packageDir = flags['output-dir']
-      ? path.relative(cwd, flags['output-dir'])
+    const { packageDir: detectedDir, apiVersion, project } = await readSfProject(cwd);
+    const packageDir = flags['package-dir']
+      ? path.relative(cwd, flags['package-dir'])
       : detectedDir;
-    const paths = getProjectPaths(cwd, packageDir);
+    const paths = getProjectPaths(cwd, packageDir, project);
     this.log(`  Package directory: ${packageDir}`);
     this.log(`  API version: ${apiVersion}`);
 
@@ -78,23 +83,32 @@ export default class TailwindInit extends SfCommand<InitResult> {
       this.log('  All dependencies already present.');
     }
 
-    // 3. Config files
+    // 3. Config files at project root
     this.log('');
-    this.log('Creating configuration files...');
+    this.log('Creating configuration files at project root...');
     track(await safeWriteFile(path.join(cwd, 'tailwind.config.js'), tailwindConfig()));
     track(await safeWriteFile(path.join(cwd, 'postcss.config.js'), postcssConfig()));
-    await ensureDir(paths.srcDir);
-    track(await safeWriteFile(path.join(paths.srcDir, 'tailwind.css'), tailwindCssSource()));
+    track(await safeWriteFile(path.join(cwd, 'tailwind.css'), tailwindCssSource()));
 
     // 4. Update .forceignore and .gitignore
-    const ignoreEntry = 'src/.tailwind-compiled.css';
+    const ignoreEntries = [
+      '.sf/',
+      '# Tailwind CSS build artifacts',
+    ];
     for (const ignoreFile of ['.forceignore', '.gitignore']) {
       const ignorePath = path.join(cwd, ignoreFile);
       if (await fileExists(ignorePath)) {
-        const content = await readFile(ignorePath, 'utf-8');
-        if (!content.includes(ignoreEntry)) {
-          const separator = content.endsWith('\n') ? '' : '\n';
-          await writeFile(ignorePath, `${content}${separator}\n# Tailwind CSS intermediate build\n${ignoreEntry}\n`, 'utf-8');
+        let content = await readFile(ignorePath, 'utf-8');
+        let updated = false;
+        for (const entry of ignoreEntries) {
+          if (!content.includes(entry)) {
+            const separator = content.endsWith('\n') ? '' : '\n';
+            content = `${content}${separator}${entry}\n`;
+            updated = true;
+          }
+        }
+        if (updated) {
+          await writeFile(ignorePath, content, 'utf-8');
           this.log(`  Updated ${ignoreFile}`);
         }
       }
@@ -104,8 +118,10 @@ export default class TailwindInit extends SfCommand<InitResult> {
     this.log('');
     this.log('Installing lwc-tailwind-bootstrap package...');
     const packageVersion = flags['package-version'];
+    const targetOrg = flags['target-org'];
     try {
-      execSync(`sf package install --package "${packageVersion}" --wait 10 --no-prompt`, {
+      const orgFlag = targetOrg ? `--target-org ${targetOrg}` : '';
+      execSync(`sf package install --package "${packageVersion}" --wait 10 --no-prompt ${orgFlag}`.trim(), {
         cwd,
         stdio: 'inherit',
       });
@@ -118,8 +134,7 @@ export default class TailwindInit extends SfCommand<InitResult> {
     this.log('');
     this.log('Running initial CSS build...');
     try {
-      compileCss(cwd, 'src/tailwind.css', paths.compiledCssPath);
-      const { results } = await splitCss(paths.compiledCssPath, paths.lwcDir, paths.tailwindCssPath);
+      const { results } = await tailwindBuild({ cwd, paths });
       this.log(`  Built and split into ${results.length} components`);
     } catch {
       this.log('  Skipped (no components using Tailwind classes yet)');
@@ -134,6 +149,11 @@ export default class TailwindInit extends SfCommand<InitResult> {
     this.log('  sf tailwind watch        Start the file watcher');
     this.log('  sf tailwind component    Scaffold a new component');
     this.log('  sf tailwind build        One-off CSS build');
+    this.log('');
+    this.log('Configuration:');
+    this.log(`  Source:  tailwind.css (PostCSS input — do not edit staticresources/tailwind.css directly)`);
+    this.log(`  Output:  ${paths.tailwindCssPath} (static resource, overwritten on each build)`);
+    this.log(`  Config:  tailwind.config.js, postcss.config.js`);
     this.log('');
 
     return { packageDir, apiVersion, filesCreated, filesSkipped };

@@ -12,7 +12,7 @@
  */
 
 import { execSync } from 'node:child_process';
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, access } from 'node:fs/promises';
 import path from 'node:path';
 import postcss from 'postcss';
 
@@ -82,21 +82,24 @@ export function compileCss(
 // ── CssSplitter Class ───────────────────────────────────────
 
 export class CssSplitter {
-  private readonly lwcDir: string;
+  private readonly lwcDirs: string[];
   private readonly staticResourcePath: string;
   private readonly excludeComponents: Set<string>;
+  private readonly onlyComponents: Set<string> | null;
 
   private classMap = new Map<string, RuleEntry[]>();
   private baseString = '';
 
   constructor(
-    lwcDir: string,
+    lwcDirs: string | string[],
     staticResourcePath: string,
     excludeComponents: Set<string> = DEFAULT_EXCLUDE,
+    onlyComponents: Set<string> | null = null,
   ) {
-    this.lwcDir = lwcDir;
+    this.lwcDirs = Array.isArray(lwcDirs) ? lwcDirs : [lwcDirs];
     this.staticResourcePath = staticResourcePath;
     this.excludeComponents = excludeComponents;
+    this.onlyComponents = onlyComponents;
   }
 
   async run(compiledCssPath: string): Promise<BuildResult> {
@@ -107,6 +110,7 @@ export class CssSplitter {
     this.classMap = classMap;
 
     await writeFile(this.staticResourcePath, baseString, 'utf-8');
+    await ensureMetaXml(this.staticResourcePath);
     const baseBlockBytes = Buffer.byteLength(baseString, 'utf-8');
 
     const components = await this.discoverComponents();
@@ -125,7 +129,11 @@ export class CssSplitter {
         if (this.classMap.has(cls)) rulesIncluded++;
       }
 
+      // Skip components with no actual Tailwind rules matched
+      if (rulesIncluded === 0) continue;
+
       const cssPath = await this.writeComponentCss(comp.dir, comp.name, generatedCss);
+      if (!cssPath) continue; // content unchanged
       writtenPaths.push(cssPath);
 
       results.push({
@@ -210,10 +218,30 @@ export class CssSplitter {
   // ── Class Extraction ──────────────────────────────────────
 
   private async discoverComponents(): Promise<Array<{ name: string; dir: string }>> {
-    const entries = await readdir(this.lwcDir, { withFileTypes: true });
-    return entries
-      .filter((e) => e.isDirectory() && !this.excludeComponents.has(e.name))
-      .map((e) => ({ name: e.name, dir: path.join(this.lwcDir, e.name) }));
+    const components: Array<{ name: string; dir: string }> = [];
+    const seen = new Set<string>();
+
+    for (const lwcDir of this.lwcDirs) {
+      let entries;
+      try {
+        entries = await readdir(lwcDir, { withFileTypes: true });
+      } catch {
+        continue; // directory may not exist
+      }
+      for (const e of entries) {
+        if (
+          e.isDirectory() &&
+          !this.excludeComponents.has(e.name) &&
+          !seen.has(e.name) &&
+          (!this.onlyComponents || this.onlyComponents.has(e.name))
+        ) {
+          seen.add(e.name);
+          components.push({ name: e.name, dir: path.join(lwcDir, e.name) });
+        }
+      }
+    }
+
+    return components;
   }
 
   private async extractComponentClasses(
@@ -322,7 +350,7 @@ export class CssSplitter {
     componentDir: string,
     componentName: string,
     generatedCss: string,
-  ): Promise<string> {
+  ): Promise<string | null> {
     const cssPath = path.join(componentDir, `${componentName}.css`);
     let existingContent = '';
 
@@ -344,8 +372,31 @@ export class CssSplitter {
       ? `${handWritten}\n\n${MARKER}\n${generatedCss}\n`
       : `${MARKER}\n${generatedCss}\n`;
 
+    // Skip write if content is identical
+    if (output === existingContent) return null;
+
     await writeFile(cssPath, output, 'utf-8');
     return cssPath;
+  }
+}
+
+// ── Meta XML ────────────────────────────────────────────────
+
+const RESOURCE_META_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<StaticResource xmlns="http://soap.sforce.com/2006/04/metadata">
+    <cacheControl>Public</cacheControl>
+    <contentType>text/css</contentType>
+    <description>Compiled Tailwind CSS utilities</description>
+</StaticResource>
+`;
+
+async function ensureMetaXml(staticResourcePath: string): Promise<void> {
+  const baseName = path.basename(staticResourcePath, path.extname(staticResourcePath));
+  const metaPath = path.join(path.dirname(staticResourcePath), `${baseName}.resource-meta.xml`);
+  try {
+    await access(metaPath);
+  } catch {
+    await writeFile(metaPath, RESOURCE_META_XML, 'utf-8');
   }
 }
 
@@ -353,9 +404,10 @@ export class CssSplitter {
 
 export async function splitCss(
   compiledCssPath: string,
-  lwcDir: string,
+  lwcDirs: string | string[],
   staticResourcePath: string,
+  onlyComponents: Set<string> | null = null,
 ): Promise<BuildResult> {
-  const splitter = new CssSplitter(lwcDir, staticResourcePath);
+  const splitter = new CssSplitter(lwcDirs, staticResourcePath, DEFAULT_EXCLUDE, onlyComponents);
   return splitter.run(compiledCssPath);
 }

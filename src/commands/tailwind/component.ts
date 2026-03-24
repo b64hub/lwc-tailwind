@@ -4,7 +4,7 @@ import { Args } from '@oclif/core';
 import { Messages } from '@salesforce/core';
 import { readSfProject, getProjectPaths } from '../../services/project.js';
 import { fileExists, ensureDir, safeWriteFile } from '../../services/file-utils.js';
-import { compileCss, splitCss } from '../../services/css-builder.js';
+import { tailwindBuild } from '../../services/build.js';
 import { componentTs, componentJs, componentHtml, componentMeta, toKebabCase } from '../../templates/component.js';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
@@ -51,8 +51,8 @@ export default class TailwindComponent extends SfCommand<ComponentResult> {
       );
     }
 
-    const { packageDir, apiVersion } = await readSfProject(cwd);
-    const paths = getProjectPaths(cwd, packageDir);
+    const { packageDir, apiVersion, project } = await readSfProject(cwd);
+    const paths = getProjectPaths(cwd, packageDir, project);
 
     // Check if exists
     const componentDir = path.join(paths.lwcDir, componentName);
@@ -97,8 +97,7 @@ export default class TailwindComponent extends SfCommand<ComponentResult> {
     this.log('');
     this.log('Generating per-component CSS...');
     try {
-      compileCss(cwd, 'src/tailwind.css', paths.compiledCssPath);
-      await splitCss(paths.compiledCssPath, paths.lwcDir, paths.tailwindCssPath);
+      await tailwindBuild({ cwd, paths });
       this.log('  CSS generated');
     } catch {
       this.log('  CSS build skipped — run `sf tailwind build` manually');

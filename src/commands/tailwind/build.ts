@@ -2,8 +2,10 @@ import path from 'node:path';
 import { SfCommand, Flags } from '@salesforce/sf-plugins-core';
 import { Messages } from '@salesforce/core';
 import { readSfProject, getProjectPaths } from '../../services/project.js';
-import { compileCss, splitCss, type SplitResult } from '../../services/css-builder.js';
+import { type SplitResult } from '../../services/css-builder.js';
 import { fileExists } from '../../services/file-utils.js';
+import { resolveComponentFilter } from '../../services/component-filter.js';
+import { tailwindBuild } from '../../services/build.js';
 
 Messages.importMessagesDirectoryFromMetaUrl(import.meta.url);
 const messages = Messages.loadMessages('lwc-tailwind', 'tailwind.build');
@@ -25,40 +27,48 @@ export default class TailwindBuild extends SfCommand<BuildResult> {
       summary: messages.getMessage('flags.production.summary'),
       default: false,
     }),
+    directory: Flags.string({
+      char: 'd',
+      summary: 'Limit the build to a specific directory path. Can be a component (lwc/myButton), an lwc/ folder, or a package directory.',
+      multiple: true,
+    }),
   };
 
   public async run(): Promise<BuildResult> {
     const { flags } = await this.parse(TailwindBuild);
     const cwd = process.cwd();
 
-    const { packageDir } = await readSfProject(cwd);
-    const paths = getProjectPaths(cwd, packageDir);
+    const { packageDir, project } = await readSfProject(cwd);
+    const paths = getProjectPaths(cwd, packageDir, project);
 
     // Check prerequisites
     const missing: string[] = [];
     if (!(await fileExists(path.join(cwd, 'tailwind.config.js')))) missing.push('tailwind.config.js');
     if (!(await fileExists(path.join(cwd, 'postcss.config.js')))) missing.push('postcss.config.js');
-    if (!(await fileExists(path.join(cwd, 'src/tailwind.css')))) missing.push('src/tailwind.css');
+    if (!(await fileExists(path.join(cwd, 'tailwind.css')))) missing.push('tailwind.css');
     if (missing.length > 0) {
       this.error(`Missing required files: ${missing.join(', ')}.\nRun "sf tailwind init" first.`);
     }
 
-    // 1. Compile with PostCSS (to intermediate file)
+    // 1. Compile and split
     this.log('');
     this.log('Compiling Tailwind CSS...');
-    compileCss(cwd, 'src/tailwind.css', paths.compiledCssPath, flags.production);
+    const onlyComponents = flags.directory
+      ? resolveComponentFilter(cwd, paths.lwcDir, flags.directory)
+      : null;
+    if (onlyComponents) {
+      this.log(`Splitting (filtered to ${onlyComponents.size} component${onlyComponents.size === 1 ? '' : 's'})...`);
+    } else {
+      this.log('Splitting per component...');
+    }
+    const { results, baseBlockBytes, baseKb, totalRules } = await tailwindBuild({
+      cwd,
+      paths,
+      production: flags.production,
+      onlyComponents,
+    });
 
-    // 2. Split per component + write base variables to static resource
-    this.log('Splitting per component...');
-    const { results, baseBlockBytes } = await splitCss(
-      paths.compiledCssPath,
-      paths.lwcDir,
-      paths.tailwindCssPath,
-    );
-
-    // 3. Summary
-    const totalRules = results.reduce((sum, r) => sum + r.rulesIncluded, 0);
-    const baseKb = (baseBlockBytes / 1024).toFixed(1);
+    // 2. Summary
     this.log('');
     this.log(`  Base variables (static resource): ${baseKb} KB`);
     for (const r of results) {

@@ -18,9 +18,11 @@ export interface SfProjectConfig {
 }
 
 export interface ProjectPaths {
+  /** Primary lwc dir (from the target package directory). */
   lwcDir: string;
+  /** All lwc dirs across every package directory in sfdx-project.json. */
+  allLwcDirs: string[];
   staticResourceDir: string;
-  srcDir: string;
   tailwindCssPath: string;
   compiledCssPath: string;
 }
@@ -36,14 +38,32 @@ export async function readSfProject(cwd: string): Promise<SfProjectConfig> {
   return { packageDir, apiVersion, project };
 }
 
-export function getProjectPaths(cwd: string, packageDir: string): ProjectPaths {
+export function getProjectPaths(cwd: string, packageDir: string, project?: SfProject): ProjectPaths {
   const base = resolveMetadataRoot(cwd, packageDir);
+
+  // Collect lwc dirs from all package directories
+  const allLwcDirs: string[] = [];
+  if (project) {
+    for (const pkg of project.getUniquePackageDirectories()) {
+      const pkgBase = resolveMetadataRoot(cwd, pkg.path);
+      const lwc = path.join(pkgBase, 'lwc');
+      if (existsSync(lwc)) {
+        allLwcDirs.push(lwc);
+      }
+    }
+  }
+  // Ensure the primary lwcDir is always included
+  const primaryLwc = path.join(base, 'lwc');
+  if (!allLwcDirs.includes(primaryLwc)) {
+    allLwcDirs.push(primaryLwc);
+  }
+
   return {
-    lwcDir: path.join(base, 'lwc'),
+    lwcDir: primaryLwc,
+    allLwcDirs,
     staticResourceDir: path.join(base, 'staticresources'),
-    srcDir: path.join(cwd, 'src'),
     tailwindCssPath: path.join(base, 'staticresources/tailwind.css'),
-    compiledCssPath: path.join(cwd, 'src', '.tailwind-compiled.css'),
+    compiledCssPath: path.join(cwd, '.sf/tailwind.css'),
   };
 }
 
