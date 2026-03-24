@@ -156,6 +156,12 @@ export class CssSplitter {
 
     let passedBase = false;
     for (const node of root.nodes) {
+      // @keyframes are global — always include in the static resource
+      if (node.type === 'atrule' && node.name === 'keyframes') {
+        baseNodes.push(node);
+        continue;
+      }
+
       if (!passedBase) {
         if (node.type === 'rule' && this.isBaseRule(node)) {
           baseNodes.push(node);
