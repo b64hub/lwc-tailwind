@@ -9,12 +9,9 @@ export function toKebabCase(name: string): string {
 export function componentTs(name: string): string {
   const className = name.charAt(0).toUpperCase() + name.slice(1);
   return `import { LightningElement } from 'lwc';
-import { useTailwind } from 'c/tailwindMixin';
+import { TailwindMixin } from 'c/tailwindMixin';
 
-export default class ${className} extends LightningElement {
-    connectedCallback(): void {
-        useTailwind(this);
-    }
+export default class ${className} extends TailwindMixin(LightningElement) {
 }
 `;
 }
@@ -22,12 +19,9 @@ export default class ${className} extends LightningElement {
 export function componentJs(name: string): string {
   const className = name.charAt(0).toUpperCase() + name.slice(1);
   return `import { LightningElement } from 'lwc';
-import { useTailwind } from 'c/tailwindMixin';
+import { TailwindMixin } from 'c/tailwindMixin';
 
-export default class ${className} extends LightningElement {
-    connectedCallback() {
-        useTailwind(this);
-    }
+export default class ${className} extends TailwindMixin(LightningElement) {
 }
 `;
 }
